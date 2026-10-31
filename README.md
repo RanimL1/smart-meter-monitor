@@ -1,6 +1,6 @@
 # Smart Meter Monitor : surveillance de la consommation électrique d'un foyer
 
-Projet Big Data, ENSI (II3). Plateforme Lambda : le **batch** apprend le comportement normal de consommation, le **streaming** détecte en direct les écarts et alerte.
+Projet Big Data. Plateforme Lambda : le **batch** apprend le comportement normal de consommation, le **streaming** détecte en direct les écarts et alerte.
 
 ```
 household_power_consumption.txt ─► HDFS (brut) ─► Spark batch ─► Parquet nettoyé ─► profil de référence ─┐
@@ -48,21 +48,21 @@ Limites à connaître : un seul foyer, la saisonnalité n'est pas modélisée (l
 ## 4. Structure du dépôt
 
 ```
-docker-compose.yml        # HDFS, Spark (master + worker), Kafka, MongoDB, dashboard, producteur
-hadoop.config             # configuration HDFS
-data/                     # fichier de données (non versionné)
+docker-compose.yml        
+hadoop.config             
+data/                     
 scripts/
-  download_data.sh        # téléchargement du jeu UCI
-  generate_synthetic_data.py   # plan B : données synthétiques au même format
+  download_data.sh        
+  generate_synthetic_data.py   
 producer/
-  replay_producer.py      # rejeu du fichier vers Kafka (cadence réglable, injection d'anomalies)
+  replay_producer.py      
 spark/
-  common.py               # chemins, configuration
-  prepare_data.py         # brut -> Parquet nettoyé
-  batch_reference.py      # profil de référence + bilans journaliers -> HDFS et MongoDB
-  streaming_job.py        # Kafka -> fenêtres -> z-score -> MongoDB
-dashboard/app.py          # Streamlit
-docs/journal_prompts.md   # modèle de journal pour la fiche de déclaration IA
+  common.py               
+  prepare_data.py         
+  batch_reference.py      
+  streaming_job.py        
+dashboard/app.py          
+docs/journal_prompts.md   
 ```
 
 ## 5. Lancement pas à pas
@@ -70,15 +70,15 @@ docs/journal_prompts.md   # modèle de journal pour la fiche de déclaration IA
 ### 5.1 Données
 
 ```bash
-bash scripts/download_data.sh                      # ou, en plan B :
-python scripts/generate_synthetic_data.py          # écrit data/household_power_consumption.txt
+bash scripts/download_data.sh                      
+python scripts/generate_synthetic_data.py          
 ```
 
 ### 5.2 Infrastructure
 
 ```bash
 docker compose up -d --build
-docker compose ps                                  # tous les services doivent être "running"
+docker compose ps                                  
 ```
 Interfaces : HDFS http://localhost:9870, Spark http://localhost:8080, Dashboard http://localhost:8501.
 
@@ -94,8 +94,8 @@ docker compose exec namenode hdfs dfs -ls /data/raw
 
 ```bash
 SUBMIT="docker compose exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy"
-$SUBMIT /app/spark/prepare_data.py       # nettoyage -> Parquet
-$SUBMIT /app/spark/batch_reference.py    # profil de référence + bilans journaliers
+$SUBMIT /app/spark/prepare_data.py    
+$SUBMIT /app/spark/batch_reference.py    
 ```
 
 ### 5.5 Streaming (terminal dédié, reste ouvert)
@@ -126,13 +126,7 @@ cd spark && python prepare_data.py && cd ..
 python producer/replay_producer.py --dry-run --file data/household_power_consumption.txt --limit 5
 ```
 
-## 6. Ce qui a été testé, et ce qui ne l'a pas été
-
-Testé : le nettoyage, le profil de référence, les bilans journaliers et le calcul des fenêtres avec z-score (PySpark 3.5.1 en local, données synthétiques, une anomalie injectée est bien détectée) ; le producteur en mode `--dry-run` ; le dashboard avec une base MongoDB simulée.
-
-**Non testé** : `docker-compose.yml` (démarrage des conteneurs, HDFS, Kafka), la lecture Kafka de Spark, l'écriture dans un vrai MongoDB et le téléchargement du jeu UCI réel. Prévoyez du temps pour corriger ces points, et vérifiez en premier que les tags d'images existent (`apache/hadoop:3`, `apache/spark:3.5.1-python3`, `apache/kafka:3.7.0`, `mongo:7`).
-
-## 7. Dépannage
+## 6. Dépannage
 
 | Symptôme | Piste |
 |---|---|
@@ -143,51 +137,7 @@ Testé : le nettoyage, le profil de référence, les bilans journaliers et le ca
 | Manque de mémoire | Réduire `SPARK_WORKER_MEMORY`, fermer les autres applications |
 | Rejouer depuis le début | Supprimer le checkpoint : `hdfs dfs -rm -r /checkpoints/streaming_job` |
 
-## 8. Plan sur deux jours (trinôme)
 
-| Moment | Membre 1 : ingestion | Membre 2 : Spark | Membre 3 : stockage et dashboard |
-|---|---|---|---|
-| Jour 1 matin | Téléchargement, HDFS, producteur | `prepare_data.py` | Docker Compose, MongoDB |
-| Jour 1 après-midi | Cadence, injection d'anomalies | `batch_reference.py` | Dashboard (partie batch) |
-| Jour 1 soir | **Test de bout en bout ensemble** | | |
-| Jour 2 matin | Scénario de démo | `streaming_job.py` | Dashboard (alertes en direct) |
-| Jour 2 après-midi | Vidéo, diapos, README, journal de prompts, fiches signées | | |
-| Jour 2 soir | Lecture croisée du code et questions de soutenance | | |
 
-À couper en premier si vous manquez de temps : le second worker, les graphiques secondaires du dashboard. À ne jamais couper : Kafka, le batch sur HDFS, le streaming, MongoDB.
 
-## 9. Plan des 8 diapos
 
-1. Titre, équipe, problème en une phrase
-2. Contexte et justification big data (volume, vélocité, variété)
-3. Données : source, format, nettoyage
-4. Architecture Lambda (schéma)
-5. Collecte et ingestion : Kafka
-6. Traitement : Spark batch et streaming, fenêtres, z-score
-7. Stockage : HDFS et MongoDB, justification
-8. Résultats et démo, répartition du travail, lien GitHub, limites
-
-## 10. Répartition du travail (à compléter)
-
-| Membre | Responsabilité | Fichiers |
-|---|---|---|
-| *(nom 1)* | Ingestion | `scripts/`, `producer/` |
-| *(nom 2)* | Traitement | `spark/` |
-| *(nom 3)* | Stockage, restitution, déploiement | `docker-compose.yml`, `dashboard/`, `README.md` |
-
-## 11. Questions probables à la soutenance
-
-- Pourquoi Kafka et pas une lecture directe du fichier par Spark ?
-- Pourquoi le batch et le streaming ? Que se passe-t-il sans la couche batch ?
-- Que fait le watermark ? Pourquoi le mode `append` ? Pourquoi la dernière heure n'apparaît-elle pas tout de suite ?
-- Pourquoi un z-score ? Quelles sont ses limites ici ?
-- Pourquoi Parquet partitionné par année ?
-- Pourquoi MongoDB et pas Cassandra ou Redis ?
-- Pourquoi l'écriture dans MongoDB se fait-elle avec un upsert ? (idempotence en cas de rejeu)
-- Où s'exécute `foreachBatch` : sur le driver ou sur les workers ?
-- Que se passe-t-il si Spark s'arrête ? (checkpoint, offsets Kafka)
-- Pourquoi `spark.sql.session.timeZone = UTC` ?
-
-## 12. Usage de l'IA générative (Zone 3)
-
-Déclaration obligatoire : chaque étudiant remplit et signe sa fiche, avec le journal des prompts (`docs/journal_prompts.md`). Chacun doit pouvoir expliquer chaque ligne de code. Ne jamais envoyer de secrets ou d'identifiants à un outil public.
