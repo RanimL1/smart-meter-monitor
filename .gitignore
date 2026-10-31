@@ -1,0 +1,6 @@
+data/*.txt
+data/*.zip
+data/*.csv
+__pycache__/
+*.pyc
+.ivy/
